@@ -33,7 +33,7 @@ class LiveDetectionScreen extends StatefulWidget {
 
 class _LiveDetectionScreenState extends State<LiveDetectionScreen> {
   static const String _modelPath = 'best';
-  static const double _defaultConfidenceThreshold = 0.35;
+  static const double _defaultConfidenceThreshold = 0.75;
   static const List<String> _targetLabels = <String>[
     'mouse',
     'headphones',
@@ -128,7 +128,7 @@ class _LiveDetectionScreenState extends State<LiveDetectionScreen> {
                   foregroundColor: Colors.white,
                   visualDensity: VisualDensity.compact,
                 ),
-                child: const Text('Reset 0.35'),
+                child: const Text('Reset 0.75'),
               ),
             ],
           ),
