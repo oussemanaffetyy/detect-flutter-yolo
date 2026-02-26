@@ -33,6 +33,7 @@ class LiveDetectionScreen extends StatefulWidget {
 
 class _LiveDetectionScreenState extends State<LiveDetectionScreen> {
   static const String _modelPath = 'best';
+  static const double _defaultConfidenceThreshold = 0.35;
   static const List<String> _targetLabels = <String>[
     'mouse',
     'headphones',
@@ -47,7 +48,7 @@ class _LiveDetectionScreenState extends State<LiveDetectionScreen> {
   final YOLOViewController _yoloController = YOLOViewController();
   List<YOLOResult> _trackedResults = <YOLOResult>[];
   bool _frontCamera = false;
-  double _confidenceThreshold = 0.35;
+  double _confidenceThreshold = _defaultConfidenceThreshold;
   final double _iouThreshold = 0.45;
 
   @override
@@ -91,6 +92,113 @@ class _LiveDetectionScreenState extends State<LiveDetectionScreen> {
     return values;
   }
 
+  void _setConfidenceThreshold(double value) {
+    setState(() {
+      _confidenceThreshold = value;
+    });
+    _yoloController.setConfidenceThreshold(value);
+  }
+
+  Widget _buildTopControls() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xAA111111),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Text(
+                'Confidence: ${_confidenceThreshold.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: () =>
+                    _setConfidenceThreshold(_defaultConfidenceThreshold),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: const Text('Reset 0.35'),
+              ),
+            ],
+          ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: Colors.tealAccent,
+              inactiveTrackColor: Colors.white24,
+              thumbColor: Colors.tealAccent,
+              overlayColor: Colors.tealAccent.withValues(alpha: 0.2),
+            ),
+            child: Slider(
+              value: _confidenceThreshold,
+              min: 0.1,
+              max: 0.9,
+              divisions: 16,
+              onChanged: _setConfidenceThreshold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomLabels(Map<String, double?> confidenceByLabel) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xAA111111),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text(
+            'Detected Labels',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _targetLabels.map((String label) {
+              final double? confidence = confidenceByLabel[label];
+              final bool detected = confidence != null;
+              return Chip(
+                backgroundColor: detected
+                    ? Colors.green.withValues(alpha: 0.2)
+                    : Colors.grey.withValues(alpha: 0.2),
+                side: BorderSide(
+                  color: detected
+                      ? Colors.green.shade300
+                      : Colors.grey.shade500,
+                ),
+                label: Text(
+                  detected
+                      ? '$label ${(confidence * 100).toStringAsFixed(1)}%'
+                      : '$label --',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isMobilePlatform =
@@ -131,88 +239,45 @@ class _LiveDetectionScreenState extends State<LiveDetectionScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
+        fit: StackFit.expand,
         children: <Widget>[
-          Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: <Widget>[
-                YOLOView(
-                  controller: _yoloController,
-                  modelPath: _modelPath,
-                  task: YOLOTask.detect,
-                  showOverlays: false,
-                  confidenceThreshold: _confidenceThreshold,
-                  iouThreshold: _iouThreshold,
-                  streamingConfig: const YOLOStreamingConfig.minimal(),
-                  lensFacing: _frontCamera ? LensFacing.front : LensFacing.back,
-                  onResult: _onResults,
-                ),
-                if (_trackedResults.isNotEmpty)
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: DetectionPainter(
-                        results: _trackedResults,
-                        mapClassName: _mappedClassName,
-                        mirrorHorizontal: _frontCamera,
-                      ),
-                    ),
-                  ),
-              ],
+          Positioned.fill(
+            child: YOLOView(
+              controller: _yoloController,
+              modelPath: _modelPath,
+              task: YOLOTask.detect,
+              showOverlays: false,
+              confidenceThreshold: _confidenceThreshold,
+              iouThreshold: _iouThreshold,
+              streamingConfig: const YOLOStreamingConfig.minimal(),
+              lensFacing: _frontCamera ? LensFacing.front : LensFacing.back,
+              onResult: _onResults,
             ),
           ),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            color: Colors.black.withValues(alpha: 0.06),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                const Text(
-                  'Detected Labels',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+          if (_trackedResults.isNotEmpty)
+            Positioned.fill(
+              child: CustomPaint(
+                painter: DetectionPainter(
+                  results: _trackedResults,
+                  mapClassName: _mappedClassName,
+                  mirrorHorizontal: _frontCamera,
                 ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _targetLabels.map((String label) {
-                    final double? confidence = confidenceByLabel[label];
-                    final bool detected = confidence != null;
-                    return Chip(
-                      backgroundColor: detected
-                          ? Colors.green.withValues(alpha: 0.2)
-                          : Colors.grey.withValues(alpha: 0.2),
-                      side: BorderSide(
-                        color: detected
-                            ? Colors.green.shade700
-                            : Colors.grey.shade500,
-                      ),
-                      label: Text(
-                        detected
-                            ? '$label ${(confidence * 100).toStringAsFixed(1)}%'
-                            : '$label --',
-                      ),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Confidence threshold: ${_confidenceThreshold.toStringAsFixed(2)}',
-                ),
-                Slider(
-                  value: _confidenceThreshold,
-                  min: 0.1,
-                  max: 0.9,
-                  divisions: 16,
-                  onChanged: (double value) {
-                    setState(() {
-                      _confidenceThreshold = value;
-                    });
-                    _yoloController.setConfidenceThreshold(value);
-                  },
-                ),
-              ],
+              ),
+            ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(bottom: false, child: _buildTopControls()),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SafeArea(
+              top: false,
+              child: _buildBottomLabels(confidenceByLabel),
             ),
           ),
         ],
